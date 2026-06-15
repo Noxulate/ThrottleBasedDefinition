@@ -1,5 +1,7 @@
-﻿ using System;
+﻿using KSP.Localization;
+using System;
 using UnityEngine;
+using UnityEngine.Diagnostics;
 
 namespace ThrottleBasedDefinition
 {
@@ -10,7 +12,7 @@ namespace ThrottleBasedDefinition
         MultiModeEngine engineMulti;
         private double engineFmax, engineIspV, engineIspSL;
         private string engineTitle, engineType, engineTags;
-        private string cachedEngineMode;
+        private string cachedEngineMode, mainClassDesc;
 
         [KSPField(isPersistant = true, groupName = "Engine", groupDisplayName = "Engine", guiName = "Engine Class", guiActive = true, guiActiveEditor = true)]
         public string mainClass;
@@ -30,9 +32,6 @@ namespace ThrottleBasedDefinition
         [KSPField(groupName = "Engine", groupDisplayName = "Engine", guiName = "Current Throttle", guiUnits = "%", guiFormat = "F1", guiActive = true)]
         public float displayThrottle = 0f;
 
-        // Properties
-        //public ModuleEngines ActiveEngine => activeEngine;
-
         // Methods
         #region Active Game Interface
         public override void OnStart(StartState state) // Initiate active engine
@@ -42,7 +41,7 @@ namespace ThrottleBasedDefinition
 
             if (activeEngine == null)
             {
-                Debug.Log($"[TBD] GetActiveEngine returned null.");
+                Debug.LogError($"[TBD] GetActiveEngine returned null.");
                 return;
             }
             if (engineMulti != null)
@@ -74,9 +73,40 @@ namespace ThrottleBasedDefinition
                 if (minThrottle != -1f)
                 {
                     minThrottlePercent = minThrottle * 100f;
+                    activeEngine.minThrust = activeEngine.maxThrust * minThrottle;
                 }
             }
             Debug.Log($"[TBD] Engine: {activeEngine}, mainClass: {mainClass}, subClass: {subClass}, minThrottle: {minThrottle}");
+        }
+        public override void OnAwake()
+        {
+            if (PartLoader.LoadedPartsList == null || activeEngine == null)
+                return;
+            int partsCount = PartLoader.LoadedPartsList.Count;
+            _ = new ConfigNode();
+            for (int i = 0; i < partsCount; i++)
+            {
+                AvailablePart part = PartLoader.LoadedPartsList[i];
+                if (part.partPrefab.GetComponents<ModuleThrottleController>().Length == 0)
+                {
+                    try
+                    {
+                        PartModule module = part.partPrefab.AddModule("ModuleThrottleController", true);
+                        AvailablePart.ModuleInfo moduleInfo = new()
+                        {
+                            moduleName = "ModuleThrottleController",
+                            moduleDisplayName = "ModuleThrottleController",//(module as ModuleThrottleController).GetModuleTitle();
+                            info = module.GetInfo()
+                        };
+                        part.moduleInfos.Add(moduleInfo);
+                        Debug.Log("Added ModulePartInfoInPAW to part " + part.name);
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.LogError("Could not add ModuleThrottleController to part " + part.name + ": " + exception.Message);
+                    }
+                }
+            }
         }
 
         public void FixedUpdate() // Controller for minThrottle enforcement
@@ -89,21 +119,20 @@ namespace ThrottleBasedDefinition
                 if (input > 0f)
                 {
                     activeEngine.minThrust = activeEngine.maxThrust * minThrottle;
-                    activeEngine.throttleMin = minThrottle; // TESTING: seeing if throttleMin actually changes the "Throttle Bar" minimum value, API details are limited
+                    //activeEngine.throttleMin = minThrottle;
                     displayThrottle = activeEngine.currentThrottle * 100f;
                     //Debug.Log($"[TBD] realIsp: {activeEngine.realIsp}");
                 }
                 else if (input == 0f)
                 {
-                    //Debug.Log("[TBD] Shutdown!");
                     activeEngine.minThrust = 0f;
-                    activeEngine.throttleMin = 0f; // TESTING: seeing if throttleMin actually changes the "Throttle Bar" minimum value, API details are limited
+                    //activeEngine.throttleMin = 0f; // TESTING: seeing if throttleMin actually changes the "Throttle Bar" minimum value, API details are limited
                     displayThrottle = 0f;
                 }
             }
-        
+
             // Flow Separation for DEEP SPACE engines
-        
+
             if (mainClass == "DEEPSPACE" && activeEngine.finalThrust > 0f)
             {
                 FlowSeparation(); // Check if the DEEP SPACE engine is in a state of flow separation now
@@ -124,7 +153,7 @@ namespace ThrottleBasedDefinition
                 {
                     IsHybridEngine = true;
                 }
-                
+
                 //string activeID = engineMulti.mode;
                 foreach (var engine in part.FindModulesImplementing<ModuleEngines>())
                 {
@@ -141,8 +170,11 @@ namespace ThrottleBasedDefinition
             {
                 foreach (var engine in part.FindModulesImplementing<ModuleEngines>())
                 {
-                    Debug.Log($"[TBD] found engine: {engine.engineID}");
-                    return engine;
+                    if (!IsAirBreathingEngine(engine) && !IsIonEngine(engine))
+                    {
+                        Debug.Log($"[TBD] found engine: {engine.engineID}");
+                        return engine;
+                    }
                 }
             }
             return null;
@@ -158,6 +190,22 @@ namespace ThrottleBasedDefinition
             engineTags = activeEngine.part.partInfo.tags;
         }
 
+        public override string GetInfo()
+        {
+            if (activeEngine != null)
+            {
+                mainClassDesc = mainClass switch
+                {
+                    "BOOSTER" => "Booster engines are best for atmospheric launch\nHighest TWRs\nLow efficiency",
+                    "SUSTAINER" => "Jack of all trades\nMedium TWRs\nMedium efficiency",
+                    "ORBITAL" => "Good in all low pressure situations\nBetter efficiency\nLow-Medium TWRs",
+                    "DEEPSPACE" => "Awesome in vacuum only, it will blowup in atmosphere!\nLow TWRs\nIncredible efficiency",
+                    _ => "Whelp, we don't know apparently. Report this error.",
+                };
+                return $"{mainClass}\n{mainClassDesc}";
+            }
+            return $"{mainClass}\nNo class description available.";
+        }
         private void CheckEngineMultiMode()
         {
             if (engineMulti != null && engineMulti.mode != cachedEngineMode)
@@ -181,7 +229,7 @@ namespace ThrottleBasedDefinition
 
         private bool IsIonEngine(ModuleEngines engine)
         {
-                    
+
             if (engine.engineType == EngineType.Electric) return true;
             foreach (Propellant propellant in engine.propellants)
             {
