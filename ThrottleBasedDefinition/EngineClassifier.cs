@@ -41,7 +41,7 @@ namespace ThrottleBasedDefinition
             else if (engineTags.Contains("vernier") || engineTags.Contains("maneuver") || engineTitle.Contains("Vernier") || engineTitle.Contains("vernier")) return EngineSubClass.MANEUVER;
             else return EngineSubClass.NONE;
         }
-        public static double CalculateMinThrottle(string mainClass, string subClass, double Fmax, double IspV, double IspSL)
+        public static float CalculateMinThrottle(string mainClass, string subClass, double Fmax, double IspV, double IspSL)
         {
             double mdot = (Fmax * 1000) / (IspV * g0);
             double minThrottle = k * Math.Pow(mdot, a);
@@ -49,23 +49,23 @@ namespace ThrottleBasedDefinition
             // Handle clamping subclasses first since they have unique properties for minThrottle
             switch (subClass)
             {
-                case "EXOTIC": return Math.Round(Clamp(minThrottle, 0.0, 0.0), 2);
-                case "NUCLEAR": return Math.Round(Clamp(minThrottle, 0.0, 0.10), 2);
-                case "HYBRID": return Math.Round(Clamp(minThrottle, 0.1, 0.4), 2);
-                case "AEROSPIKE": return Math.Round(Clamp(minThrottle, 0.1, 0.4), 2);
-                case "LANDER": return Math.Round(Clamp(minThrottle, 0.0, 0.4), 2);
-                case "ELECTRIC": return Math.Round(Clamp(minThrottle, 0.0, 0.0), 2);
-                case "MANEUVER": return Math.Round(Clamp(minThrottle, 0.0, 0.0), 2);
+                case "EXOTIC": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.0), 2);
+                case "NUCLEAR": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.10), 2);
+                case "HYBRID": return (float)Math.Round(Clamp(minThrottle, 0.1, 0.4), 2);
+                case "AEROSPIKE": return (float)Math.Round(Clamp(minThrottle, 0.1, 0.4), 2);
+                case "LANDER": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.4), 2);
+                case "ELECTRIC": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.0), 2);
+                case "MANEUVER": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.0), 2);
             }
 
             // If subclass is "NONE" then mainClass will determine minThrottle
             switch (mainClass)
             {
-                case "BOOSTER": return Math.Round(Clamp(minThrottle, 0.75, 1.0), 2);
-                case "SUSTAINER": return Math.Round(Clamp(minThrottle, 0.25, 0.75), 2);
-                case "ORBITAL": return Math.Round(Clamp(minThrottle, 0.10, 0.25), 2);
-                case "DEEPSPACE": return Math.Round(Clamp(minThrottle, 0.0, 0.15), 2);
-                default: return Math.Round(Clamp(minThrottle, 0.0, 1.0), 2);
+                case "BOOSTER": return (float)Math.Round(Clamp(minThrottle, 0.75, 1.0), 2);
+                case "SUSTAINER": return (float)Math.Round(Clamp(minThrottle, 0.25, 0.75), 2);
+                case "ORBITAL": return (float)Math.Round(Clamp(minThrottle, 0.10, 0.25), 2);
+                case "DEEPSPACE": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.15), 2);
+                default: return (float)Math.Round(Clamp(minThrottle, 0.0, 1.0), 2);
             }
         }
     }
