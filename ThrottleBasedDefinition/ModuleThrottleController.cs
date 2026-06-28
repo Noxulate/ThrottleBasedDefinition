@@ -1,5 +1,7 @@
 ﻿using System;
 using JetBrains.Annotations;
+using KSP.UI.Screens;
+using KSP.UI.TooltipTypes;
 using UnityEngine;
 
 namespace ThrottleBasedDefinition
@@ -9,7 +11,6 @@ namespace ThrottleBasedDefinition
         // Fields
         ModuleEngines activeEngine;
         MultiModeEngine engineMulti;
-        private float _engineMultFlow;
         private double _engineFmax, _engineIspV, _engineIspSL;
         private string _engineTitle, _engineType, _engineTags;
         private string cachedEngineMode, mainClassDesc, subClassDesc, classColor;
@@ -42,14 +43,14 @@ namespace ThrottleBasedDefinition
                 // HACK: Thanks JonnyOThan for the GetInfo hook trick: "compiling module infos is one of the last things that happens when compiling the prefab."
                 activeEngine = GetActiveEngine();
                 CacheEngineInfo();
-                SetThrottleController();
+                InitializeThrottleController();
                 activeEngine.minThrust = minThrottle * activeEngine.maxThrust;
-                mainClassDesc = mainClass switch
+                mainClassDesc = mainClass switch // TODO: Localization
                 {
-                    "BOOSTER" => "Booster engines are best for atmospheric launch.<br>Highest TWRs.<br>Low efficiency.",
-                    "SUSTAINER" => "Jack of all trades, master of some.<br>Medium TWRs.<br>Medium efficiency.",
-                    "ORBITAL" => "Good in all low pressure situations.<br>Low-Medium TWRs.<br>Better efficiency.",
-                    "DEEPSPACE" => "Awesome in vacuum only, it will destroy itself if fired in atmosphere!<br>Low TWRs.<br>Incredible efficiency.",
+                    "BOOSTER" => "Booster engines are best for atmospheric launch.<br>Highest Thrust.<br>Low efficiency.",
+                    "SUSTAINER" => "Jack of all trades, master of some.<br>Medium Thrust.<br>Medium efficiency.",
+                    "ORBITAL" => "Good in all low pressure situations.<br>Low to Medium Thrust.<br>Better efficiency.",
+                    "DEEPSPACE" => "Awesome in vacuum only, it will destroy itself if fired in atmosphere!<br>Low Thrust.<br>Incredible efficiency.",
                     _ => "Whelp, we don't know apparently. Report this error.",
                 };
 
@@ -61,11 +62,11 @@ namespace ThrottleBasedDefinition
                     "DEEPSPACE" => "#776bfa", 
                     _ => "#FFFFFF",
                 };
-                string info = "<b>Class: <color=" + classColor + $">{ mainClass}</color></b><br><br>{mainClassDesc}<br><br><b>Minimum Throttle:</b> {minThrottlePercent}%  of  Max Thrust.";
+                string info = "<b>Class: <color=" + classColor + $">{ mainClass}</color></b><br><br>{mainClassDesc}<br><br><b>Minimum Throttle:</b> {minThrottlePercent}% of Max Thrust.";
 
-                subClassDesc = subClass switch
+                subClassDesc = subClass switch // TODO: Localization
                 {
-                    "EXOTIC" => "Is this even really an 'engine' anymore..?",
+                    "EXOTIC" => "Is this really even an 'engine' anymore..?",
                     "NUCLEAR" => "Harnessing the power of atoms and E=mc^2 to produce thrust. Caution, might be slightly radioactive.",
                     "HYBRID" => "Air-breathing rocket engine! Great choice for SSTOs.",
                     "AEROSPIKE" => "Spikey rockets. Uses the ambient air-pressure to form the 'nozzle', resulting in higher efficiency at all altitudes.",
@@ -85,7 +86,7 @@ namespace ThrottleBasedDefinition
         }
         public override string GetModuleDisplayName()
         {
-            return "Engine Classification"; // TODO: Localization... #autoLOC_012345
+            return "Engine Classification"; // TODO: Localization... ex. #autoLOC_012345
         }
 
         public override void OnStart(StartState state)
@@ -110,65 +111,33 @@ namespace ThrottleBasedDefinition
             if (engineMulti != null) CheckEngineMultiMode();
             if (activeEngine.EngineIgnited)
             {
-                float input = activeEngine.independentThrottle ? activeEngine.independentThrottlePercentage * 0.01f : vessel.ctrlState.mainThrottle;
-
-                /*if (activeEngine.EngineIgnited && input >= minThrottle)
-                {
-                    activeEngine.UnFlameout(true);
-                }
-
-                if (activeEngine.isOperational)
-                {
-                    if (input >= minThrottle)
-                    {
-                        activeEngine.minThrust = activeEngine.maxThrust * minThrottle;
-                        activeEngine.throttleMin = minThrottle;
-                        displayThrottle = activeEngine.currentThrottle * 100f;
-                    }
-                    else if (input < minThrottle)
-                    {
-                        activeEngine.Flameout("Below minimum throttle!");
-                        activeEngine.minThrust = 0f;
-                        activeEngine.throttleMin = 0f;
-                        displayThrottle = 0f;
-                    }
-                }*/
-
+                float input = activeEngine.independentThrottle ? activeEngine.independentThrottlePercentage * 0.01f : FlightInputHandler.state.mainThrottle;
+                bool aboveMin = true;
                 if (input >= minThrottle)
                 {
-                    activeEngine.UnFlameout(true);
+                    if(!aboveMin)
+                    {
+                        activeEngine.UnFlameout(true);
+                    }
+                    aboveMin = true;
                     activeEngine.minThrust = activeEngine.maxThrust * minThrottle;
                     activeEngine.multFlow = 1f;
                     activeEngine.minFuelFlow = minThrottle * activeEngine.maxFuelFlow;
                     displayThrottle = activeEngine.currentThrottle * 100f;
-                    //activeEngine.ActivatePowerFX();
-                    //activeEngine.flameoutBar = 0f;
-                    //activeEngine.UpdateThrottle();
-                    //activeEngine.CalculateThrust();
-                    //activeEngine.flameout = false;
-                    //activeEngine.maxThrust = (float)_engineFmax;
-                    //activeEngine.maxFuelFlow = _engineMaxFuelFlow;
-                    //activeEngine.throttleMin = minThrottle;
-                    //Debug.Log($"[TBD] realIsp: {activeEngine.realIsp}");
                 }
                 else if (input < minThrottle)
                 {
-                    activeEngine.Flameout("Below minimum throttle!");
+                    if(aboveMin)
+                    {
+                        activeEngine.Flameout("Below minimum throttle!"); // TODO: Localization
+                    }
+                    aboveMin = false;
                     activeEngine.minThrust = 0f;
                     activeEngine.multFlow = 0f;
                     activeEngine.minFuelFlow = 0f;
                     displayThrottle = 0f;
-                    //activeEngine.flameoutBar = float.MaxValue;
-                    //activeEngine.maxThrust = 0f;
-                    //activeEngine.requestedMassFlow = 0f;
-                    //activeEngine.finalThrust = 0f;
-                    //activeEngine.flameout = true;
-                    //activeEngine.DeactivatePowerFX();
-                    //activeEngine.currentThrottle = 0f;
-                    //activeEngine.maxFuelFlow = 0f;
-                    //activeEngine.throttleMin = 0f; // TESTING: seeing if throttleMin actually changes the "Throttle Bar" minimum value, API details are limited
                 }
-                //}
+
 
                 // Flow Separation for DEEP SPACE engines
 
@@ -179,6 +148,7 @@ namespace ThrottleBasedDefinition
                 else return;
             }
         }
+
         #endregion
 
         #region Functional Methods
@@ -200,7 +170,6 @@ namespace ThrottleBasedDefinition
                     if (!IsAirBreathingEngine(engine))
                     {
                         Debug.Log($"[TBD] found engine: {engine.engineID}");
-                        Debug.Log($"[TBD] MultFlow: {_engineMultFlow}");
                         return engine;
                     }
                 }
@@ -214,7 +183,6 @@ namespace ThrottleBasedDefinition
                     if (!IsAirBreathingEngine(engine))
                     {
                         Debug.Log($"[TBD] found engine: {engine.engineID}");
-                        Debug.Log($"[TBD] MultFlow: {_engineMultFlow}");
                         return engine;
                     }
                 }
@@ -227,14 +195,12 @@ namespace ThrottleBasedDefinition
             _engineFmax = activeEngine.maxThrust;
             _engineIspV = activeEngine.atmosphereCurve.Evaluate(0);
             _engineIspSL = activeEngine.atmosphereCurve.Evaluate(1);
-            _engineMultFlow = activeEngine.multFlow;
-            
             _engineTitle = activeEngine.part.partInfo.title;
             _engineType = activeEngine.engineType.ToString();
             _engineTags = activeEngine.part.partInfo.tags;
         }
 
-        public void SetThrottleController()
+        public void InitializeThrottleController()
         {
             if (mainClass == "UNCLASS")
             {
