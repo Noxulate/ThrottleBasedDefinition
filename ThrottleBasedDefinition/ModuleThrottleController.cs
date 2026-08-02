@@ -8,12 +8,12 @@ namespace ThrottleBasedDefinition
 {
     public class ModuleThrottleController : PartModule
     {
-        // Fields
         ModuleEngines activeEngine;
         MultiModeEngine engineMulti;
         private double _engineFmax, _engineIspV, _engineIspSL;
         private string _engineTitle, _engineType, _engineTags;
         private string cachedEngineMode, mainClassDesc, subClassDesc, classColor;
+        private bool aboveMin = true;
 
         [KSPField(isPersistant = true, groupName = "Engine", groupDisplayName = "Engine", guiName = "Engine Class", guiActive = true, guiActiveEditor = true)]
         public string mainClass;
@@ -26,21 +26,19 @@ namespace ThrottleBasedDefinition
         public bool IsHybridEngine = false; // Is it a hybrid airbreathing engine like the RAPIER?
         [KSPField(isPersistant = true)]
         public bool IsLanderEngine = false; // Is it a BOOSTER or SUSTAINER engine intended to land back at the launchpad? This must be manually assigned via a "TBD_[Mod Name].cfg" patch
-
+        public bool IsActiveEngineIgnited => activeEngine != null && activeEngine.EngineIgnited;
         [KSPField(isPersistant = false, groupName = "Engine", groupDisplayName = "Engine", guiName = "Minimum Throttle", guiUnits = "%", guiFormat = "F0", guiActive = true, guiActiveEditor = true)]
         public float minThrottlePercent = 0f; // Displays minThrottle as a percentage in the PartActionWindow (PAW)
         [KSPField(groupName = "Engine", groupDisplayName = "Engine", guiName = "Current Throttle", guiUnits = "%", guiFormat = "F1", guiActive = true)]
         public float displayThrottle = 0f;
 
-
-        // Methods
         #region Active Game Interface
 
         public override string GetInfo()
         {
             if (HighLogic.LoadedScene == GameScenes.LOADING)
             {
-                // HACK: Thanks JonnyOThan for the GetInfo hook trick: "compiling module infos is one of the last things that happens when compiling the prefab."
+                // TRICK: Thanks JonnyOThan for the GetInfo hook trick: "compiling module infos is one of the last things that happens when compiling the prefab."
                 activeEngine = GetActiveEngine();
                 CacheEngineInfo();
                 InitializeThrottleController();
@@ -50,7 +48,7 @@ namespace ThrottleBasedDefinition
                     "BOOSTER" => "Booster engines are best for atmospheric launch.<br>Highest Thrust.<br>Low efficiency.",
                     "SUSTAINER" => "Jack of all trades, master of some.<br>Medium Thrust.<br>Medium efficiency.",
                     "ORBITAL" => "Good in all low pressure situations.<br>Low to Medium Thrust.<br>Better efficiency.",
-                    "DEEPSPACE" => "Awesome in vacuum only, it will destroy itself if fired in atmosphere!<br>Low Thrust.<br>Incredible efficiency.",
+                    "VACUUM" => "Awesome in vacuum only, it will destroy itself if fired in atmosphere!<br>Low Thrust.<br>Incredible efficiency.",
                     _ => "Whelp, we don't know apparently. Report this error.",
                 };
 
@@ -59,7 +57,7 @@ namespace ThrottleBasedDefinition
                     "BOOSTER" => "#D85A30",
                     "SUSTAINER" => "#BA7517",
                     "ORBITAL" => "#1D9E75",
-                    "DEEPSPACE" => "#776bfa", 
+                    "VACUUM" => "#776bfa", 
                     _ => "#FFFFFF",
                 };
                 string info = "<b>Class: <color=" + classColor + $">{ mainClass}</color></b><br><br>{mainClassDesc}<br><br><b>Minimum Throttle:</b> {minThrottlePercent}% of Max Thrust.";
@@ -80,6 +78,22 @@ namespace ThrottleBasedDefinition
             else return base.GetInfo();
         }
 
+        public Color GetClassColorRGB(string mainClass)
+        {
+            Color boosterColor = new Color(0.847f, 0.353f, 0.188f, 1f);
+            Color sustainerColor = new Color(0.729f, 0.459f, 0.09f, 1f);
+            Color orbitalColor = new Color(0.114f, 0.62f, 0.459f, 1f);
+            Color vacuumColor = new Color(0.467f, 0.42f, 0.98f, 1f);
+            Color classColorRGB = mainClass switch
+            {
+                "BOOSTER" => boosterColor,
+                "SUSTAINER" => sustainerColor,
+                "ORBITAL" => orbitalColor,
+                "VACUUM" => vacuumColor,
+                _ => Color.magenta,
+            };
+            return classColorRGB;
+        }
         public string GetModuleTitle()
         {
             return "Engine Classification";
@@ -112,7 +126,6 @@ namespace ThrottleBasedDefinition
             if (activeEngine.EngineIgnited)
             {
                 float input = activeEngine.independentThrottle ? activeEngine.independentThrottlePercentage * 0.01f : FlightInputHandler.state.mainThrottle;
-                bool aboveMin = true;
                 if (input >= minThrottle)
                 {
                     if(!aboveMin)
@@ -139,11 +152,11 @@ namespace ThrottleBasedDefinition
                 }
 
 
-                // Flow Separation for DEEP SPACE engines
+                // Flow Separation for VACUUM engines
 
-                if (mainClass == "DEEPSPACE" && activeEngine.finalThrust > 0f)
+                if (mainClass == "VACUUM" && activeEngine.finalThrust > 0f)
                 {
-                    FlowSeparation(); // Check if the DEEP SPACE engine is in a state of flow separation now
+                    FlowSeparation(); // Check if the VACUUM engine is in a state of flow separation now
                 }
                 else return;
             }
@@ -189,7 +202,10 @@ namespace ThrottleBasedDefinition
             }
             return null;
         }
-
+        public float GetMinThrottle()
+        {
+            return minThrottle;
+        }
         private void CacheEngineInfo()
         {
             _engineFmax = activeEngine.maxThrust;
@@ -202,12 +218,12 @@ namespace ThrottleBasedDefinition
 
         public void InitializeThrottleController()
         {
-            if (mainClass == "UNCLASS")
+            if (mainClass == "INIT")
             {
                 mainClass = EngineClassifier.AssignEngineMainClass(_engineFmax, _engineIspV, _engineIspSL).ToString();
                 Debug.Log($"[TBD] AssignedEngineMainClass returned {mainClass} for {_engineTitle}");
             }
-            if (subClass == "UNCLASS")
+            if (subClass == "INIT")
             {
                 subClass = EngineClassifier.AssignEngineSubClass(_engineTitle, _engineType, _engineTags, IsHybridEngine, IsLanderEngine).ToString();
                 Debug.Log($"[TBD] AssignedEngineSubClass returned {subClass} for {_engineTitle}");
@@ -247,8 +263,8 @@ namespace ThrottleBasedDefinition
         /*    
                 Flow separation occurs when the engine nozzle is overexpanded, causing pressure at the exit of the nozzle (p_e) to be less than the ambient pressure (p_a).
                 This induces shocks, side loads, and thrust loss which causes the engine to fail catastrophically if not well managed.
-                Simulation at this level of complexity is not possible in KSP, therefore ThrottleBasedDefinition uses the "overheating" of any DEEP SPACE class engine as a proxy for flow separation.
-                The goal is to force the player to consider engine selection more intentionally and to use DEEP SPACE engines for their intended role in vacuum.
+                Simulation at this level of complexity is not possible in KSP, therefore ThrottleBasedDefinition uses the "overheating" of any VACUUM class engine as a proxy for flow separation.
+                The goal is to force the player to consider engine selection more intentionally and to use VACUUM engines only in vacuum environments.
         */
         private void FlowSeparation()
         {

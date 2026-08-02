@@ -13,8 +13,8 @@ namespace ThrottleBasedDefinition
         {
             return Math.Max(min, Math.Min(max, value));
         }
-        public enum EngineMainClass { UNCLASS, BOOSTER, SUSTAINER, ORBITAL, DEEPSPACE, UNKNOWN }
-        public enum EngineSubClass { UNCLASS, EXOTIC, NUCLEAR, HYBRID, AEROSPIKE, LANDER, MANEUVER, NONE }
+        public enum EngineMainClass { INIT, BOOSTER, SUSTAINER, ORBITAL, VACUUM, UNKNOWN }
+        public enum EngineSubClass { INIT, EXOTIC, NUCLEAR, HYBRID, AEROSPIKE, LANDER, MANEUVER, NONE }
 
         public static EngineMainClass AssignEngineMainClass(double Fmax, double IspV, double IspSL)
         {
@@ -26,7 +26,7 @@ namespace ThrottleBasedDefinition
                 if (mdot >= 300 && dIsp < 150) return EngineMainClass.BOOSTER;
                 else if (mdot < 300 && dIsp < 125) return EngineMainClass.SUSTAINER;
                 else if (mdot < 300 && dIsp >= 125 && dIsp < 325) return EngineMainClass.ORBITAL;
-                else if (mdot < 300 && dIsp >= 325) return EngineMainClass.DEEPSPACE;
+                else if (mdot < 300 && dIsp >= 325) return EngineMainClass.VACUUM;
                 else return EngineMainClass.UNKNOWN;
             }
             return EngineMainClass.UNKNOWN;
@@ -64,7 +64,7 @@ namespace ThrottleBasedDefinition
                 case "BOOSTER": return (float)Math.Round(Clamp(minThrottle, 0.75, 1.0), 2);
                 case "SUSTAINER": return (float)Math.Round(Clamp(minThrottle, 0.25, 0.75), 2);
                 case "ORBITAL": return (float)Math.Round(Clamp(minThrottle, 0.10, 0.25), 2);
-                case "DEEPSPACE": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.15), 2);
+                case "VACUUM": return (float)Math.Round(Clamp(minThrottle, 0.0, 0.15), 2);
                 default: return (float)Math.Round(Clamp(minThrottle, 0.0, 1.0), 2);
             }
         }
